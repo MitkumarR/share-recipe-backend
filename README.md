@@ -2,7 +2,6 @@
 
 This Django app provides a complete **backend API service** for the [**Share Recipe**](https://github.com/MitkumarR/share-recipe-site) platform. It is designed using Django REST Framework (DRF) and offers secure, clean, and scalable endpoints to manage recipes, user interactions, and feedback.
 
----
 
 ### What is used?
 
@@ -60,7 +59,6 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
----
 <!---
 ### Workflow & Structure
 
@@ -106,5 +104,4 @@ Create issues for bugs or feature requests.
 
 > This API backend is designed to be **modular, secure, and developer-friendly**, making it easy to extend and integrate with any frontend or mobile app.
 
----
 
