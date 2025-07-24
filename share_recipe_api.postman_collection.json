@@ -1,0 +1,76 @@
+{
+  "info": {
+    "name": "Share Recipe API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth - Get Token",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"your_email\",\n  \"password\": \"your_password\"\n}"
+        },
+        "url": { "raw": "http://localhost:8000/api/token/" }
+      }
+    },
+    {
+      "name": "List Recipes",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "http://localhost:8000/api/recipes/list/" }
+      }
+    },
+    {
+      "name": "Create Recipe",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "title", "value": "My New Recipe" },
+            { "key": "description", "value": "Delicious and easy" },
+            { "key": "category", "value": "1" },
+            { "key": "region", "value": "1" },
+            { "key": "session", "value": "1" },
+            { "key": "type", "value": "1" },
+            { "key": "image", "type": "file" }
+          ]
+        },
+        "url": { "raw": "http://localhost:8000/api/recipes/create/" }
+      }
+    },
+    {
+      "name": "Send Feedback",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"user@example.com\",\n  \"message\": \"I love this recipe app!\"\n}"
+        },
+        "url": { "raw": "http://localhost:8000/api/recipes/feedback/" }
+      }
+    },
+    {
+      "name": "Like Recipe",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": { "raw": "http://localhost:8000/api/recipes/recipe/<id>/like/" }
+      }
+    },
+    {
+      "name": "My Recipes",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "http://localhost:8000/api/recipes/my-recipes/" }
+      }
+    }
+  ]
+}

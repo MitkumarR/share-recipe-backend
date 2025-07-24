@@ -2,83 +2,130 @@ from rest_framework import viewsets, permissions, generics, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from django.shortcuts import get_object_or_404
 
-from .models import Recipe, Ingredient, Region, Session, Category, RecipeStep, Type, Feedback
+from .models import (
+    Recipe, Region, Session, Category,
+    RecipeStep, Type, Feedback, RecipeIngredient
+)
 from .serializers import (
-    RecipeSerializer, IngredientSerializer,
-    RegionSerializer, SessionSerializer, CategorySerializer, RecipeListSerializer, RecipeDetailSerializer,
-    RecipeStepSerializer, TypeSerializer, FeedbackSerializer
+    RecipeSerializer, RecipeIngredientSerializer, RegionSerializer,
+    SessionSerializer, CategorySerializer, RecipeListSerializer,
+    RecipeDetailSerializer, RecipeStepSerializer, TypeSerializer,
+    FeedbackSerializer
 )
 
 from django_filters.rest_framework import DjangoFilterBackend
+from .filters import RecipeFilter # Import the custom filter class
+
 
 # Helper function to check ownership
-
-
 def user_is_recipe_author(user, recipe_id):
     return Recipe.objects.filter(id=recipe_id, author=user).exists()
 
-# Create step
-
-
-class RecipeStepCreateView(generics.CreateAPIView):
-    serializer_class = RecipeStepSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def perform_create(self, serializer):
-        recipe_id = self.kwargs.get("recipe_id")
-        if not user_is_recipe_author(self.request.user, recipe_id):
-            raise permissions.PermissionDenied(
-                "You are not allowed to add steps to this recipe.")
-        recipe = Recipe.objects.get(id=recipe_id)
-        serializer.save(recipe=recipe)
-
-
-# Update step
-class RecipeStepUpdateView(generics.RetrieveUpdateAPIView):
-    queryset = RecipeStep.objects.all()
-    serializer_class = RecipeStepSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        # Filter to steps belonging to recipes owned by current user
-        return RecipeStep.objects.filter(recipe__author=self.request.user)
-
-
-# Delete step
-class RecipeStepDeleteView(generics.DestroyAPIView):
-    queryset = RecipeStep.objects.all()
-    serializer_class = RecipeStepSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return RecipeStep.objects.filter(recipe__author=self.request.user)
-
+# ========== Public Recipes ==========
 
 class RecipeListView(generics.ListAPIView):
     queryset = Recipe.objects.filter(is_published=True).order_by('-created_at')
     serializer_class = RecipeListSerializer
+    # Keep the backends, but we will replace filterset_fields
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['region', 'type', 'session', 'category']
+
+    filterset_class = RecipeFilter
+
+    # Keep search and ordering fields as they are
     search_fields = ['title', 'description']
-    ordering_fields = ['created_at', 'likes']
+    ordering_fields = ['created_at', 'likes__count']  # Note: ordering by likes is more efficient this way
 
 class TopRecipesListView(generics.ListAPIView):
-    queryset = Recipe.objects.filter(is_published=True).order_by("-likes")[:10]
+    queryset = Recipe.objects.filter(is_published=True)[:6]
     serializer_class = RecipeListSerializer
+
 
 class RecipeDetailView(generics.RetrieveAPIView):
     queryset = Recipe.objects.filter(is_published=True)
     serializer_class = RecipeDetailSerializer
 
 
+# ========== Like/Unlike a Recipe ==========
+
+class RecipeLikeToggleView(APIView):
+    """
+    View to like or unlike a recipe.
+    Requires authentication.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        # Get the recipe object, or return 404 if not found
+        recipe = get_object_or_404(Recipe, pk=pk)
+        user = request.user
+
+        # Check if the user has already liked the recipe
+        if user in recipe.likes.all():
+            # If liked, remove the like (unlike)
+            recipe.likes.remove(user)
+            liked = False
+        else:
+            # If not liked, add the like
+            recipe.likes.add(user)
+            liked = True
+
+        # Return a response with the current like status and total likes
+        return Response({
+            'liked': liked,
+            'total_likes': recipe.total_likes()
+        }, status=status.HTTP_200_OK)
+
+
+# ========== Save/Unsave a Recipe ==========
+
+class RecipeSaveToggleView(APIView):
+    """
+    View to save or unsave a recipe for the logged-in user.
+    Requires authentication.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        recipe = get_object_or_404(Recipe, pk=pk)
+        user = request.user
+
+        if user in recipe.saved_by.all():
+            # If already saved, remove it from saved list
+            recipe.saved_by.remove(user)
+            saved = False
+        else:
+            # If not saved, add it to the saved list
+            recipe.saved_by.add(user)
+            saved = True
+
+        return Response({'saved': saved}, status=status.HTTP_200_OK)
+
+
+class SavedRecipeListView(generics.ListAPIView):
+    """
+    View to list all recipes saved by the currently authenticated user.
+    """
+    serializer_class = RecipeListSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Return all recipes from the 'saved_recipes' related manager
+        return self.request.user.saved_recipes.all().order_by('-created_at')
+
+
+# ========== Filter Options ==========
+
 class FilterOptionsView(APIView):
     def get(self, request):
         data = {
-            "types": list(Type.objects.values("id", "name")),
-            "categories": list(Category.objects.values("id", "name")),
-            "regions": list(Region.objects.values("id", "name")),
-            "sessions": list(Session.objects.values("id", "name")),
+            "types": list(Type.objects.values("name")),
+            "categories": list(Category.objects.values("name")),
+            "regions": list(Region.objects.values("name")),
+            "sessions": list(Session.objects.values("name")),
+            # --- ADDED THIS LINE ---
+            "ingredients": list(RecipeIngredient.objects.values_list('ingredient', flat=True).distinct().order_by('ingredient')),
         }
         return Response(data, status=status.HTTP_200_OK)
 
@@ -86,24 +133,24 @@ class FilterOptionsView(APIView):
 class OptionsView(APIView):
     def get(self, request):
         data = {
-            "types": list(Type.objects.values("id", "name")),
-            "categories": list(Category.objects.values("id", "name")),
-            "regions": list(Region.objects.values("id", "name")),
-            "ingredients": list(Ingredient.objects.values("id", "name")),
-            "sessions": list(Session.objects.values("id", "name")),
+            "types": list(Type.objects.values("name")),
+            "categories": list(Category.objects.values("name")),
+            "regions": list(Region.objects.values("name")),
+            # Corrected this line to provide a distinct list of ingredient names
+            "ingredients": list(RecipeIngredient.objects.values_list('ingredient', flat=True).distinct().order_by('ingredient')),
+            "sessions": list(Session.objects.values("name")),
         }
         return Response(data, status=status.HTTP_200_OK)
 
+# ========== ReadOnly ViewSets ==========
 
 class RecipeViewSet(viewsets.ModelViewSet):
     queryset = Recipe.objects.all().order_by('-created_at')
-    serializer_class = RecipeSerializer
 
-
-class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Ingredient.objects.all()
-    serializer_class = IngredientSerializer
-
+    def get_serializer_class(self):
+        if self.action in ['list', 'retrieve']:
+            return RecipeDetailSerializer
+        return RecipeSerializer
 
 class RegionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Region.objects.all()
@@ -130,11 +177,8 @@ class StepsViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = RecipeStepSerializer
 
 
-'''
-For user side CRUD operations for recipes
-'''
+# ========== User's Own Recipes (CRUD) ==========
 
-# Create recipe
 class MyRecipeCreateView(generics.CreateAPIView):
     queryset = Recipe.objects.all()
     serializer_class = RecipeSerializer
@@ -144,39 +188,38 @@ class MyRecipeCreateView(generics.CreateAPIView):
         print("Received data:", self.request.data)
         serializer.save(author=self.request.user)
 
-# Read recipe
+
 class MyRecipeListView(generics.ListAPIView):
     serializer_class = RecipeListSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['region', 'type', 'session', 'category']
+    filterset_fields = ['region', 'type__name', 'session__name', 'category__name']
     search_fields = ['title', 'description']
     ordering_fields = ['created_at', 'total_likes']
 
     def get_queryset(self):
         return Recipe.objects.filter(author=self.request.user).order_by('-created_at')
 
-# Update recipe
+
 class MyRecipeUpdateView(generics.RetrieveUpdateAPIView):
     queryset = Recipe.objects.all()
     serializer_class = RecipeSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        # Only allow update if the user is the author
         return Recipe.objects.filter(author=self.request.user)
 
 
-# Delete recipe
 class MyRecipeDeleteView(generics.DestroyAPIView):
     queryset = Recipe.objects.all()
     serializer_class = RecipeSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        # Only allow delete if the user is the author
         return Recipe.objects.filter(author=self.request.user)
 
+
+# ========== Feedback ==========
 
 class FeedbackCreateView(generics.CreateAPIView):
     queryset = Feedback.objects.all()
