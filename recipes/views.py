@@ -1,3 +1,4 @@
+from django.db.models import F
 from rest_framework import viewsets, permissions, generics, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -6,13 +7,14 @@ from django.shortcuts import get_object_or_404
 
 from .models import (
     Recipe, Region, Session, Category,
-    RecipeStep, Type, Feedback, RecipeIngredient
+    RecipeStep, Type, Feedback, RecipeIngredient, Comment
 )
+from .permissions import IsOwnerOrReadOnly
 from .serializers import (
     RecipeSerializer, RecipeIngredientSerializer, RegionSerializer,
     SessionSerializer, CategorySerializer, RecipeListSerializer,
     RecipeDetailSerializer, RecipeStepSerializer, TypeSerializer,
-    FeedbackSerializer
+    FeedbackSerializer, CommentSerializer
 )
 
 from django_filters.rest_framework import DjangoFilterBackend
@@ -46,6 +48,43 @@ class RecipeDetailView(generics.RetrieveAPIView):
     queryset = Recipe.objects.filter(is_published=True)
     serializer_class = RecipeDetailSerializer
 
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        # Increment view_count efficiently without race conditions
+        instance.view_count = F('view_count') + 1
+        instance.save(update_fields=['view_count'])
+        instance.refresh_from_db()  # Refresh to get the updated value
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+# ========== Comments ==========
+
+class CommentListCreateView(generics.ListCreateAPIView):
+    """
+    View to list all comments for a recipe or create a new one.
+    """
+    serializer_class = CommentSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        # Filter comments based on the recipe_pk from the URL
+        recipe_pk = self.kwargs['recipe_pk']
+        return Comment.objects.filter(recipe_id=recipe_pk)
+
+    def perform_create(self, serializer):
+        # Automatically associate the comment with the recipe and the user
+        recipe = get_object_or_404(Recipe, pk=self.kwargs['recipe_pk'])
+        serializer.save(author=self.request.user, recipe=recipe)
+
+
+class CommentRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    View to retrieve, update, or delete a single comment.
+    """
+    queryset = Comment.objects.all()
+    serializer_class = CommentSerializer
+    # Use the custom permission to ensure only authors can edit/delete
+    permission_classes = [IsOwnerOrReadOnly]
 
 # ========== Like/Unlike a Recipe ==========
 

@@ -25,7 +25,7 @@ from .views import (
     MyRecipeUpdateView,
     MyRecipeDeleteView,
 
-    FeedbackCreateView
+    FeedbackCreateView, CommentListCreateView, CommentRetrieveUpdateDestroyView
 )
 
 router = DefaultRouter()
@@ -46,6 +46,9 @@ urlpatterns = [
     path('recipe/<int:pk>/save/', RecipeSaveToggleView.as_view(), name='recipe-save-toggle'),
     path('saved-recipes/', SavedRecipeListView.as_view(), name='saved-recipe-list'),
 
+    path('recipe/<int:recipe_pk>/comments/', CommentListCreateView.as_view(), name='comment-list-create'),
+    path('comments/<int:pk>/', CommentRetrieveUpdateDestroyView.as_view(), name='comment-detail'),
+
     path("filters/", FilterOptionsView.as_view(), name="filter-options"),
     path("options/", OptionsView.as_view(), name="options"),
 
@@ -55,4 +58,6 @@ urlpatterns = [
     path('create/', MyRecipeCreateView.as_view(), name='recipe-create'),
     path('<int:pk>/update/',MyRecipeUpdateView.as_view(), name='recipe-update'),
     path('<int:pk>/delete/', MyRecipeDeleteView.as_view(), name='recipe-delete'),
+
+
 ]

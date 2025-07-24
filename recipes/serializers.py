@@ -1,8 +1,19 @@
 from rest_framework import serializers
 from .models import (
     Recipe, Region, Session, Category,
-    RecipeStep, Type, Feedback, RecipeIngredient
+    RecipeStep, Type, Feedback, RecipeIngredient, Comment
 )
+
+class CommentSerializer(serializers.ModelSerializer):
+    """
+    Serializer for the Comment model.
+    """
+    # Use ReadOnlyField to display the username instead of the user ID.
+    author = serializers.ReadOnlyField(source='author.username')
+
+    class Meta:
+        model = Comment
+        fields = ['id', 'author', 'text', 'created_at']
 
 
 class RegionSerializer(serializers.ModelSerializer):
@@ -163,7 +174,7 @@ class RecipeListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Recipe
-        fields = ['id', 'title', 'description', 'image', 'likes', 'author']
+        fields = ['id', 'title', 'description', 'image', 'likes', 'view_count','author']
 
     def get_likes(self, obj):
         return obj.total_likes()
@@ -175,6 +186,7 @@ class RecipeDetailSerializer(serializers.ModelSerializer):
     type = serializers.StringRelatedField(many=True)
     ingredients = serializers.SerializerMethodField()
     steps = RecipeStepSerializer(many=True, read_only=True)
+    comments = CommentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Recipe
