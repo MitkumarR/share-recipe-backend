@@ -1,3 +1,5 @@
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from .models import (
     Recipe, Region, Session, Category,
@@ -68,8 +70,12 @@ class RecipeSerializer(serializers.ModelSerializer):
     category = serializers.ListField(child=serializers.CharField(), write_only=True)
     type = serializers.ListField(child=serializers.CharField(), write_only=True)
 
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_total_likes(self, obj):
+        return obj.likes.count()
+
     # These fields are for output only.
-    total_likes = serializers.ReadOnlyField()
+    total_likes = serializers.SerializerMethodField(method_name='get_total_likes')
     author = serializers.ReadOnlyField(source='author.username')
 
     class Meta:
@@ -90,14 +96,12 @@ class RecipeSerializer(serializers.ModelSerializer):
         category_names = validated_data.pop('category')
         type_names = validated_data.pop('type')
 
-        # --- MODIFIED: Use get_or_create for Region ---
         # It returns a tuple (object, created_boolean), we only need the object.
         region, _ = Region.objects.get_or_create(name=region_name)
 
         # Create the recipe instance with the simple fields
         recipe = Recipe.objects.create(region=region, **validated_data)
 
-        # --- MODIFIED: Use get_or_create for ManyToMany fields ---
         for name in session_names:
             session, _ = Session.objects.get_or_create(name=name)
             recipe.session.add(session)
@@ -128,7 +132,6 @@ class RecipeSerializer(serializers.ModelSerializer):
         category_names = validated_data.pop('category', None)
         type_names = validated_data.pop('type', None)
 
-        # --- MODIFIED: Use get_or_create for update logic as well ---
         if region_name:
             instance.region, _ = Region.objects.get_or_create(name=region_name)
 
@@ -168,35 +171,51 @@ class RecipeSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
+
 class RecipeListSerializer(serializers.ModelSerializer):
     author = serializers.ReadOnlyField(source='author.username')
+
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_likes(self, obj):
+        return obj.total_likes()
+
     likes = serializers.SerializerMethodField()
 
     class Meta:
         model = Recipe
-        fields = ['id', 'title', 'description', 'image', 'likes', 'view_count','author']
+        fields = ['id', 'title', 'description', 'image', 'likes', 'author', 'view_count']
 
-    def get_likes(self, obj):
-        return obj.total_likes()
 
 class RecipeDetailSerializer(serializers.ModelSerializer):
     region = serializers.StringRelatedField()
     session = serializers.StringRelatedField(many=True)
     category = serializers.StringRelatedField(many=True)
     type = serializers.StringRelatedField(many=True)
-    ingredients = serializers.SerializerMethodField()
     steps = RecipeStepSerializer(many=True, read_only=True)
     comments = CommentSerializer(many=True, read_only=True)
 
-    class Meta:
-        model = Recipe
-        fields = '__all__'
-
+    @extend_schema_field({
+        'type': 'array',
+        'items': {
+            'type': 'object',
+            'properties': {
+                'ingredient': {'type': 'string'},
+                'quantity': {'type': 'string'}
+            }
+        }
+    })
     def get_ingredients(self, obj):
         return [
             {"ingredient": ri.ingredient, "quantity": ri.quantity}
             for ri in obj.recipe_ingredients.all()
         ]
+
+    ingredients = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Recipe
+        fields = '__all__'
+
 
 class FeedbackSerializer(serializers.ModelSerializer):
     class Meta:

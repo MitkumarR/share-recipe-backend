@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "drf_spectacular",
 
@@ -179,3 +180,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# For development, we'll print emails to the console.
+# In production, you would replace this with a real email service like SendGrid or Mailgun.
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'

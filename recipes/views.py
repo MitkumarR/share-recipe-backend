@@ -1,4 +1,5 @@
 from django.db.models import F
+from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets, permissions, generics, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -68,6 +69,8 @@ class CommentListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         # Filter comments based on the recipe_pk from the URL
+        if getattr(self, 'swagger_fake_view', False):
+            return Comment.objects.none()
         recipe_pk = self.kwargs['recipe_pk']
         return Comment.objects.filter(recipe_id=recipe_pk)
 
@@ -95,6 +98,21 @@ class RecipeLikeToggleView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        summary="Like or unlike a recipe",
+        request=None,
+        responses={
+            200: {
+                'description': 'Returns the current like status and total likes.',
+                'examples': {
+                    'application/json': {
+                        'liked': True,
+                        'total_likes': 15
+                    }
+                }
+            }
+        }
+    )
     def post(self, request, pk):
         # Get the recipe object, or return 404 if not found
         recipe = get_object_or_404(Recipe, pk=pk)
@@ -126,6 +144,20 @@ class RecipeSaveToggleView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        summary="Save or unsave a recipe",
+        request=None,
+        responses={
+            200: {
+                'description': 'Returns the current saved status.',
+                'examples': {
+                    'application/json': {
+                        'saved': True,
+                    }
+                }
+            }
+        }
+    )
     def post(self, request, pk):
         recipe = get_object_or_404(Recipe, pk=pk)
         user = request.user
@@ -151,10 +183,27 @@ class SavedRecipeListView(generics.ListAPIView):
 
     def get_queryset(self):
         # Return all recipes from the 'saved_recipes' related manager
+        if getattr(self, 'swagger_fake_view', False):
+            return Recipe.objects.none()
         return self.request.user.saved_recipes.all().order_by('-created_at')
 
 
 # ========== Filter Options ==========
+
+@extend_schema(
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'types': {'type': 'array', 'items': {'type': 'object'}},
+                'categories': {'type': 'array', 'items': {'type': 'object'}},
+                'regions': {'type': 'array', 'items': {'type': 'object'}},
+                'sessions': {'type': 'array', 'items': {'type': 'object'}},
+                'ingredients': {'type': 'array', 'items': {'type': 'string'}},
+            }
+        }
+    }
+)
 
 class FilterOptionsView(APIView):
     def get(self, request):
@@ -168,7 +217,20 @@ class FilterOptionsView(APIView):
         }
         return Response(data, status=status.HTTP_200_OK)
 
-
+@extend_schema(
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'types': {'type': 'array', 'items': {'type': 'object'}},
+                'categories': {'type': 'array', 'items': {'type': 'object'}},
+                'regions': {'type': 'array', 'items': {'type': 'object'}},
+                'sessions': {'type': 'array', 'items': {'type': 'object'}},
+                'ingredients': {'type': 'array', 'items': {'type': 'string'}},
+            }
+        }
+    }
+)
 class OptionsView(APIView):
     def get(self, request):
         data = {
@@ -237,6 +299,8 @@ class MyRecipeListView(generics.ListAPIView):
     ordering_fields = ['created_at', 'total_likes']
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return Recipe.objects.none()
         return Recipe.objects.filter(author=self.request.user).order_by('-created_at')
 
 
@@ -246,6 +310,8 @@ class MyRecipeUpdateView(generics.RetrieveUpdateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return Recipe.objects.none()
         return Recipe.objects.filter(author=self.request.user)
 
 
@@ -255,6 +321,8 @@ class MyRecipeDeleteView(generics.DestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return Recipe.objects.none()
         return Recipe.objects.filter(author=self.request.user)
 
 
